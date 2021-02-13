@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os/exec"
+	"sync"
 )
 
 func New(host string, port int) (*Shell, error) {
@@ -39,6 +40,8 @@ type Shell struct {
 	lastStdinRecv int
 	stdinBuf      []byte
 	stdoutBuf     []byte
+
+	closeLock sync.Mutex
 }
 
 func (s *Shell) stdinPipe() {
@@ -99,6 +102,8 @@ func (s *Shell) Start() {
 }
 
 func (s *Shell) Close() {
+	s.closeLock.Lock()
+	defer s.closeLock.Unlock()
 	if s.cmd == nil {
 		return
 	}
