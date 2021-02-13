@@ -16,26 +16,46 @@ func main() {
 	defer listener.Close()
 	fmt.Println("Listening on port 5003")
 
+	// Channel for sending commands from stdin -> client
+	sendChan := make(chan string)
+
+	go readCommands(sendChan)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			fmt.Println("Error accepting: ", err)
 		}
 
-		go handleRequest(conn)
+		// Could make this threaded, but no point right now...
+		handleRequest(conn, sendChan)
 	}
 }
 
-func handleRequest(conn net.Conn) {
+// readCommands continuously reads from stdin till closed and passes everything to the sendChan
+func readCommands(sendChan chan<- string) {
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for scanner.Scan() {
+		sendChan <- scanner.Text()
+	}
+}
+
+func handleRequest(conn net.Conn, sendChan <-chan string) {
 	fmt.Println("New client connected")
 
-	// Read alllll
+	closeChan := make(chan struct{})
+
+	// Pipe shell output to console
 	go func() {
 		buf := make([]byte, 512)
 
 		for {
 			n, err := conn.Read(buf[0:])
 			if err != nil {
+				fmt.Println()
+				fmt.Println("Client disconnected")
+				close(closeChan)
 				break
 			}
 
@@ -43,15 +63,14 @@ func handleRequest(conn net.Conn) {
 		}
 	}()
 
-	// Start shell
-	scanner := bufio.NewScanner(os.Stdin)
-	var cmd string
-
+	// Pipe commands to client
 	for {
-		scanner.Scan()
-		cmd = scanner.Text()
-		if cmd != "" {
+		select {
+		case cmd := <-sendChan:
 			conn.Write([]byte(fmt.Sprintf("%s\n", cmd)))
+		case <-closeChan:
+			// Break out of the loop
+			return
 		}
 	}
 }

@@ -1,4 +1,4 @@
-package main
+package shell
 
 const (
 	// Shell constants
